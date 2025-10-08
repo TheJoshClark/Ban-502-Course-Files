@@ -1,0 +1,405 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+### Project ###
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(GGally) 
+library(ggcorrplot) 
+library(gridExtra)
+library(MASS) 
+library(leaps) 
+library(lmtest) 
+library(splines) 
+library(car)
+library(glmnet)
+library(skimr)
+library(mice) 
+library(VIM)
+library(naniar)
+library(UpSetR)
+```
+
+```{r}
+knitr::opts_chunk$set(
+  echo = TRUE,       
+  results = 'show',    
+  message = FALSE,    
+  warning = FALSE      
+)
+
+```
+
+##Read in Data 
+
+```{r}
+train <- read_csv("train (1).csv")
+str(train)
+summary(train)
+skim(train)
+```
+
+#Mutation 
+```{r}
+train = train %>% mutate(attribute_0 = as_factor(attribute_0)) %>% 
+    mutate(attribute_1 = as_factor(attribute_1)) %>% mutate(product_code = as_factor(product_code)) %>%
+   mutate(failure = as_factor(failure))
+```
+
+
+## Dealing with Missing Data
+
+```{r}
+train %>% filter(measurement_0 == 0)
+```
+
+##Missingness
+
+```{r}
+gg_miss_var(train)
+```
+
+##By Case 
+
+```{r}
+gg_miss_case(train)
+```
+##By a factor 
+
+```{r}
+gg_miss_fct(x = train, fct = failure)
+```
+
+
+## Variable and row 
+
+```{r}
+vis_miss(train)
+```
+##Row Delete 
+
+```{r}
+train_rowdel = train %>% drop_na() 
+train_rowdel = train_rowdel %>% mutate(attribute_0 = as_factor(attribute_0)) %>% 
+    mutate(attribute_1 = as_factor(attribute_1)) %>% mutate(product_code = as_factor(product_code)) %>%
+   mutate(failure = as_factor(failure))
+
+```
+
+
+##Imputation
+
+```{r}
+set.seed(1234) #sets seed for random number generator
+train_age = mice(train, m=5, method='pmm', printFlag=FALSE)
+summary(train_age)
+```
+##Merge the values into Data frame
+
+```{r}
+train_complete = complete(train_age) 
+summary(train_complete)
+str(train_complete)
+```
+
+##Visualize 
+
+```{r}
+ggplot(train, aes(x = failure, fill = failure)) + geom_bar() + scale_fill_manual(values = c("Yes" = "red", "No" = "green")) + theme_bw()
+```
+##Calculate failure percentage 
+
+```{r}
+train %>%
+  count(failure)
+
+```
+```{r}
+5649/(20921+5649)
+
+```
+##Finding Strong predictors 
+
+```{r}
+train <- train %>%
+  mutate(failure_numeric = ifelse(failure == "Yes", 1, 0))
+train_complete <- train_complete %>%
+  mutate(failure_numeric = ifelse(failure == "Yes", 1, 0))
+train_rowdel <- train_rowdel %>%
+  mutate(failure_numeric = ifelse(failure == "Yes", 1, 0))
+
+```
+
+##GGPairs
+
+```{r}
+ggpairs(train_complete, columns = c("product_code", "loading", "attribute_0", "attribute_1","failure_numeric"))
+ggpairs(train_complete, columns = c("attribute_2", "attribute_3", "measurement_0", "measurement_1","failure_numeric"))
+ggpairs(train_complete, columns = c("measurement_2", "measurement_3", "measurement_4", "measurement_5","failure_numeric"))
+ggpairs(train_complete, columns = c("measurement_6", "measurement_7", "measurement_8", "measurement_9","failure_numeric"))
+ggpairs(train_complete, columns = c("measurement_10", "measurement_11", "measurement_12", 
+            "measurement_13","failure_numeric"))
+ ggpairs(train_complete, columns = c("measurement_14", "measurement_15", "measurement_16", 
+            "measurement_17","failure_numeric")) 
+```
+##Row Delete GGPairs
+
+```{r}
+ggpairs(train_rowdel, columns = c("product_code", "loading", "attribute_0", "attribute_1","failure_numeric"))
+ggpairs(train_rowdel, columns = c("attribute_2", "attribute_3", "measurement_0", "measurement_1","failure_numeric"))
+ggpairs(train_rowdel, columns = c("measurement_2", "measurement_3", "measurement_4", "measurement_5","failure_numeric"))
+ggpairs(train_rowdel, columns = c("measurement_6", "measurement_7", "measurement_8", "measurement_9","failure_numeric"))
+ggpairs(train_rowdel, columns = c("measurement_10", "measurement_11", "measurement_12", 
+            "measurement_13","failure_numeric"))
+ ggpairs(train_rowdel, columns = c("measurement_14", "measurement_15", "measurement_16", 
+            "measurement_17","failure_numeric")) 
+```
+
+
+
+
+##Visualization 
+
+Factors 
+```{r}
+ggplot(train_complete, aes(x = product_code, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Product Code", y = "Proportion of Failure", fill = "Failure")
+ggplot(train, aes(x=product_code, fill = failure)) + geom_bar() + theme_bw()
+ggplot(train_complete, aes(x = attribute_0, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Attribute 0", y = "Proportion of Failure", fill = "Failure")
+ggplot(train_complete, aes(x = attribute_1, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Attribute 1", y = "Proportion of Failure", fill = "Failure")
+
+```
+
+
+Numeric 
+
+```{r}
+ggplot(train_complete, aes(x = factor(failure), y = loading, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "loading")
+ggplot(train_complete, aes(x = factor(failure), y = attribute_2, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "attribute_2")
+ggplot(train_complete, aes(x = factor(failure), y = attribute_3, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "attribute_3")
+
+```
+##More Boxplots
+
+```{r}
+ggplot(train_complete, aes(x = factor(failure), y = measurement_0, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_0")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_1, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_1")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_2, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_2")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_3, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_3")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_4, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_4")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_5, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_5")
+```
+
+##More Boxplots
+
+```{r}
+ggplot(train_complete, aes(x = factor(failure), y = measurement_6, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_6")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_7, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_7")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_8, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_8")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_9, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_9")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_10, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_10")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_11, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_11")
+```
+
+##More Boxplots
+
+```{r}
+ggplot(train_complete, aes(x = factor(failure), y = measurement_12, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_12")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_13, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_13")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_14, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_14")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_15, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_15")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_16, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_16")
+ggplot(train_complete, aes(x = factor(failure), y = measurement_17, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_17")
+```
+
+##Tables
+```{r}
+train_complete %>%
+  mutate(measurement_1_bin = cut(measurement_1, breaks = 5)) %>%
+  count(measurement_1_bin, failure) %>%
+  group_by(measurement_1_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_2_bin = cut(measurement_2, breaks = 5)) %>%
+  count(measurement_2_bin, failure) %>%
+  group_by(measurement_2_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_3_bin = cut(measurement_3, breaks = 5)) %>%
+  count(measurement_3_bin, failure) %>%
+  group_by(measurement_3_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_8_bin = cut(measurement_4, breaks = 5)) %>%
+  count(measurement_8_bin, failure) %>%
+  group_by(measurement_8_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_5_bin = cut(measurement_5, breaks = 5)) %>%
+  count(measurement_5_bin, failure) %>%
+  group_by(measurement_5_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_6_bin = cut(measurement_6, breaks = 5)) %>%
+  count(measurement_6_bin, failure) %>%
+  group_by(measurement_6_bin) %>%
+  mutate(prop = n / sum(n))
+
+
+```
+
+##Tables
+
+```{r}
+train_complete %>%
+  mutate(measurement_6_bin = cut(measurement_6, breaks = 5)) %>%
+  count(measurement_6_bin, failure) %>%
+  group_by(measurement_6_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_7_bin = cut(measurement_7, breaks = 5)) %>%
+  count(measurement_7_bin, failure) %>%
+  group_by(measurement_7_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_8_bin = cut(measurement_8, breaks = 5)) %>%
+  count(measurement_8_bin, failure) %>%
+  group_by(measurement_8_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_9_bin = cut(measurement_9, breaks = 5)) %>%
+  count(measurement_9_bin, failure) %>%
+  group_by(measurement_9_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_10_bin = cut(measurement_10, breaks = 5)) %>%
+  count(measurement_10_bin, failure) %>%
+  group_by(measurement_10_bin) %>%
+  mutate(prop = n / sum(n))
+```
+
+##Tables
+
+```{r}
+train_complete %>%
+  mutate(measurement_11_bin = cut(measurement_11, breaks = 5)) %>%
+  count(measurement_11_bin, failure) %>%
+  group_by(measurement_11_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_12_bin = cut(measurement_12, breaks = 5)) %>%
+  count(measurement_12_bin, failure) %>%
+  group_by(measurement_12_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_13_bin = cut(measurement_13, breaks = 5)) %>%
+  count(measurement_13_bin, failure) %>%
+  group_by(measurement_13_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_14_bin = cut(measurement_14, breaks = 5)) %>%
+  count(measurement_14_bin, failure) %>%
+  group_by(measurement_14_bin) %>%
+  mutate(prop = n / sum(n))
+train_complete %>%
+  mutate(measurement_15_bin = cut(measurement_15, breaks = 5)) %>%
+  count(measurement_15_bin, failure) %>%
+  group_by(measurement_15_bin) %>%
+  mutate(prop = n / sum(n))
+
+```
+
+##Row Delete Graphs
+
+```{r}
+ggplot(train_rowdel, aes(x = product_code, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Product Code", y = "Proportion of Failure", fill = "Failure")
+ggplot(train_rowdel, aes(x = attribute_0, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Attribute 0", y = "Proportion of Failure", fill = "Failure")
+ggplot(train_rowdel, aes(x = attribute_1, fill = factor(failure))) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Attribute 1", y = "Proportion of Failure", fill = "Failure")
+```
+
+##Row Delete Boxplots
+
+```{r}
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_12, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_12")
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_13, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_13")
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_14, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_14")
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_15, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_15")
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_16, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_16")
+ggplot(train_rowdel, aes(x = factor(failure), y = measurement_17, fill = factor(failure))) +
+  geom_boxplot() +
+  labs(x = "Failure", y = "measurement_17")
+```
+
