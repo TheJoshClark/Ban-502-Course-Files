@@ -1,0 +1,78 @@
+##Assignment 2
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(lmtest)
+```
+Read in Data Set 
+
+```{r}
+air = airquality
+str(air)
+summary(air)
+```
+```{r}
+air2 = air %>% drop_na()
+```
+New Data has been set 
+
+```{r}
+ggpairs(air2)
+```
+
+```{r}
+ggplot(air2, aes(x = Temp, y = Ozone)) +
+geom_point() 
+```
+```{r}
+air_simple = recipe(Ozone ~ Temp, air2)
+air_simple
+```
+Roles for variables 
+
+```{r}
+lm_model = 
+  linear_reg() %>%
+    set_engine("lm")
+```
+Next Add in Workflow 
+
+```{r}
+lm_wflow = 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(air_simple)
+```
+
+Next we combine recipe and model with a workflow
+
+```{r}
+lm_fit = fit(lm_wflow, air2)
+```
+Summarize it 
+
+```{r}
+summary(lm_fit$fit$fit$fit)
+```
+```{r}
+confint(lm_fit$fit$fit$fit)
+```
+Run Predictions 
+
+```{r}
+
+```
+```{r}
+testdata = data.frame(Temp = c(80))
+predict(lm_fit, new_data = testdata)
+```
+
+
+Run Durbin Test 
+
+```{r}
+dwtest(lm_fit$fit$fit$fit)
+```
+

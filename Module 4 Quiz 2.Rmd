@@ -1,0 +1,214 @@
+## Module 4 Quiz 2 
+
+
+```{r, include = FALSE}
+library(tidyverse)
+library(tidymodels)
+library(ranger) #for random forests
+library(randomForest) #also for random forests
+library(caret)
+library(gridExtra)
+library(vip) #variable importance
+```
+
+# Read in the Data Set
+
+```{r}
+drug <- read_csv("drug_data-2.csv")
+```
+
+Naming the columns 
+
+```{r}
+names(drug) = c("ID", "Age", "Gender", "Education", "Country", "Ethnicity",
+"Nscore", "Escore", "Oscore", "Ascore", "Cscore", "Impulsive",
+"SS", "Alcohol", "Amphet", "Amyl", "Benzos", "Caff", "Cannabis",
+"Choc", "Coke", "Crack", "Ecstasy", "Heroin", "Ketamine", "Legalh",
+"LSD", "Meth", "Mushrooms", "Nicotine", "Semer", "VSA")
+```
+
+#Cleaning the data 
+
+```{r}
+drug[drug == "CL0"] = "No"
+drug[drug == "CL1"] = "No"
+drug[drug == "CL2"] = "Yes"
+drug[drug == "CL3"] = "Yes"
+drug[drug == "CL4"] = "Yes"
+drug[drug == "CL5"] = "Yes"
+drug[drug == "CL6"] = "Yes"
+```
+
+#Mutation 
+
+```{r}
+drug_clean = drug %>% mutate_at(vars(Age:Ethnicity), funs(as_factor)) %>%
+mutate(Age = factor(Age, labels = c("18_24", "25_34", "35_44", "45_54",
+"55_64", "65_"))) %>%
+mutate(Gender = factor(Gender, labels = c("Male", "Female"))) %>%
+mutate(Education = factor(Education, labels = c("Under16", "At16", "At17", "At18",
+"SomeCollege","ProfessionalCert",
+"Bachelors", "Masters",
+"Doctorate"))) %>%
+mutate(Country = factor(Country, labels = c("USA", "NewZealand", "Other", "Australia",
+"Ireland","Canada","UK"))) %>%
+mutate(Ethnicity = factor(Ethnicity, labels = c("Black", "Asian", "White",
+"White/Black", "Other",
+"White/Asian", "Black/Asian"))) %>%
+mutate_at(vars(Alcohol:VSA), funs(as_factor)) %>%
+select(-ID)
+```
+
+#Take a Peak 
+
+```{r}
+str(drug_clean)
+```
+
+#Cleaning the Data more 
+```{r}
+drug_clean = drug_clean %>% select(!(Alcohol:Mushrooms)) %>% select(!(Semer:VSA))
+```
+
+```{r}
+skim(drug_clean)
+```
+
+```{r}
+set.seed(123) 
+drug_split = initial_split(drug_clean, prop = 0.7, strata = Nicotine) #70% in training
+train = training(drug_split)
+test = testing(drug_split)
+```
+
+Time to visualize 
+
+```{r}
+p1 = ggplot(train, aes(x = Age, fill = Nicotine)) + geom_bar(position = "fill")
+p2 = ggplot(train, aes(x = Gender, fill = Nicotine)) + geom_bar(position = "fill")
+p3 = ggplot(train, aes(x = Education, fill = Nicotine)) + geom_bar(position = "fill")
+p4 = ggplot(train, aes(x = Country, fill = Nicotine)) + geom_bar(position = "fill")
+grid.arrange(p1,p2,p3,p4)
+```
+```{r}
+p1 = ggplot(train, aes(x = Ethnicity, fill = Nicotine)) + geom_bar(position = "fill")
+p2 = ggplot(train, aes(x = Nscore, fill = Nicotine)) + geom_bar(position = "fill")
+p3 = ggplot(train, aes(x = Escore, fill = Nicotine)) + geom_bar(position = "fill")
+p4 = ggplot(train, aes(x = Oscore, fill = Nicotine)) + geom_bar(position = "fill")
+grid.arrange(p1,p2,p3,p4)
+```
+```{r}
+p1 = ggplot(train, aes(x = Ascore, fill = Nicotine)) + geom_bar(position = "fill")
+p2 = ggplot(train, aes(x = Cscore, fill = Nicotine)) + geom_bar(position = "fill")
+p3 = ggplot(train, aes(x = Impulsive, fill = Nicotine)) + geom_bar(position = "fill")
+p4 = ggplot(train, aes(x = SS, fill = Nicotine)) + geom_bar(position = "fill")
+grid.arrange(p1,p2,p3,p4)
+```
+```{r}
+set.seed(123)
+rf_folds = vfold_cv(train, v = 5)
+```
+
+##Random Forest 
+```{r}
+drug_recipe = recipe(Nicotine ~., train) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model = rand_forest(mtry = tune(), min_n = tune(), trees = 100) %>% 
+  set_engine("ranger", importance = "permutation") %>% #added importance metric
+  set_mode("classification")
+
+drug_wflow = 
+  workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(drug_recipe)
+
+rf_grid = grid_regular(
+  mtry(range = c(2, 8)), #these values determined through significant trial and error
+  min_n(range = c(5, 20)), #these values determined through significant trial and error
+  levels = 5
+)
+
+set.seed(123)
+rf_res_tuned = tune_grid(
+  drug_wflow,
+  resamples = rf_folds,
+  grid = 10 #use the tuning grid
+)
+```
+
+```{r}
+rf_res_tuned %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "Accuracy")
+```
+```{r}
+drug_recipe = recipe(Nicotine ~., train) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model = rand_forest(mtry = tune(), min_n = tune(), trees = 100) %>% 
+  set_engine("ranger", importance = "permutation") %>% #added importance metric
+  set_mode("classification")
+
+drug_wflow = 
+  workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(drug_recipe)
+
+rf_grid = grid_regular(
+  mtry(range = c(32, 35)), #these values determined through significant trial and error
+  min_n(range = c(26, 29)), #these values determined through significant trial and error
+  levels = 5
+)
+
+set.seed(123)
+rf_res_tuned = tune_grid(
+  drug_wflow,
+  resamples = rf_folds,
+  grid = rf_grid #use the tuning grid
+)
+```
+
+```{r}
+best_rf = select_best(rf_res_tuned,metric= "accuracy")
+
+final_rf = finalize_workflow(
+  drug_wflow,
+  best_rf
+)
+
+final_rf
+```
+#Finalize the Fit 
+```{r}
+final_rf_fit = fit(final_rf, train)
+```
+
+```{r}
+final_rf_fit %>% pull_workflow_fit() %>% vip(geom = "point")
+```
+```{r}
+trainpredrf = predict(final_rf_fit, train)
+head(trainpredrf)
+```
+
+```{r}
+confusionMatrix(trainpredrf$.pred_class, train$Nicotine, 
+                positive = "Yes")
+```
+```{r}
+testpredrf = predict(final_rf_fit, test)
+head(testpredrf)
+confusionMatrix(testpredrf$.pred_class, test$Nicotine, 
+                positive = "Yes")
+```
+

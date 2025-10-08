@@ -1,0 +1,30 @@
+```{r}
+library(tidyverse)
+InventoryData <- read_csv("InventoryData.csv")
+inventory = InventoryData
+summary(inventory)
+inventorya <- filter(inventory, Supplier=="A")
+inventorya = mutate(inventorya, OnHandRatio = `On Hand` / `Annual Demand`)
+
+```
+
+```{r}
+avg_cost <- inventorya %>%
+  group_by(`Item SKU`) %>%                        # Group by Item SKU
+  summarise(SKUAvgCost = mean(`Cost per Unit ($)`, na.rm = TRUE))
+```
+
+
+
+```{r}
+diamonddata = diamonds
+```
+
+```{r}
+ggplot(diamonddata, aes(x = carat, y = price)) +
+geom_point() +
+  scale_x_continuous(breaks = seq(min(diamonddata$carat), max(diamonddata$carat), by = 0.5)) +
+  scale_y_continuous(breaks = seq(min(diamonddata$price), max(diamonddata$price), by = 500)) +
+  facet_wrap(~ color)
+```
+

@@ -1,0 +1,188 @@
+## Quiz 2
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(e1071) #often needed for various statistical tasks
+library(ROCR)
+```
+Models loaded in 
+Uploading Data set
+
+```{r}
+parole = read_csv("parole.csv")
+```
+#Converting the Data 
+```{r}
+parole = parole %>% mutate(male = as_factor(male)) %>% 
+  mutate(male = fct_recode(male, "female" = "0", "male" = "1" )) %>% 
+   mutate(race = as_factor(race)) %>% 
+  mutate(race = fct_recode(race, "white" = "1", "otherwise" = "2" )) %>%
+   mutate(state = as_factor(state)) %>% 
+  mutate(state = fct_recode(state, "other" = "1", "Kentucky" = "2", "Louisiana" = "3", "Virginia" = "4" )) %>% 
+   mutate(crime = as_factor(crime)) %>% 
+  mutate(crime = fct_recode(crime, "other" = "1", "larceny" = "2", "Drug related" = "3", "Driving related" = "4" )) %>% 
+  mutate(multiple.offenses = as_factor(multiple.offenses)) %>% 
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "multiple offenses" = "1", "otherwise" = "0" )) %>% 
+   mutate(violator = as_factor(violator)) %>%
+  mutate(violator = fct_recode(violator, "no" = "0", "yes" = "1"))
+
+  
+```
+Violators 
+
+```{r}
+summary(parole)
+```
+#Set the Training set 
+
+```{r}
+set.seed(12345) 
+parole_split = initial_split(parole, prop = 0.70, strata = violator)
+train = training(parole_split)
+test = testing(parole_split)
+```
+#Ordering Resonse Variable 
+
+```{r}
+levels(train$violator)
+```
+
+```{r}
+train = train %>% mutate(violator = fct_relevel(violator, c("no","yes")))
+levels(train$violator)
+```
+##Build the model 
+Objective is to predict whether or not they will violate parole 
+
+```{r}
+ggplot(parole,aes(x=violator, fill = male)) + geom_bar()
+```
+```{r}
+ggplot(parole,aes(x=violator, fill = state)) + geom_bar()
+```
+```{r}
+ggplot(parole,aes(x=violator, fill = max.sentence)) + geom_boxplot()
+```
+
+```{r}
+parole_model = 
+  logistic_reg(mode = "classification") %>% #note the use of logistic_reg and mode = "classification"
+  set_engine("glm") #standard logistic regression engine is glm
+
+parole_recipe = recipe(violator ~ state, train)
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe) %>% 
+  add_model(parole_model)
+
+parole_fit = fit(logreg_wf, train)
+```
+#Run the Model 
+
+```{r}
+summary(parole_fit$fit$fit$fit)
+```
+##Updating the model 
+
+```{r}
+parole_model2 = 
+  logistic_reg(mode = "classification") %>% #note the use of logistic_reg and mode = "classification"
+  set_engine("glm") #standard logistic regression engine is glm
+
+parole_recipe2 = recipe(violator ~ state + multiple.offenses + race, train)
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe2) %>% 
+  add_model(parole_model2)
+
+parole_fit2 = fit(logreg_wf, train)
+```
+# Run the updated model 
+
+```{r}
+summary(parole_fit2$fit$fit$fit)
+```
+```{r}
+new_parolee <- tibble(
+  state = factor("Louisiana", levels = levels(train$state)),
+  multiple.offenses = factor("multiple offenses", levels = levels(train$multiple.offenses)),
+  race = factor("white", levels = levels(train$race))
+)
+predict(parole_fit2, new_data = new_parolee, type = "prob")
+
+
+
+```
+#ROC
+
+```{r}
+predictions = predict(parole_fit2, new_data = train, type="prob")
+predictions$.pred_yes
+prob_yes = predictions$.pred_yes
+ROCRpred = prediction(prob_yes, train$violator)
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+```
+```{r}
+as.numeric(performance(ROCRpred, "auc")@y.values)
+```
+```{r}
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpred))
+```
+```{r}
+threshold = 0.2015788
+predicted_class = prob_yes > threshold
+t1 = table(train$violator, predicted_class)
+t1
+```
+```{r}
+(t1[1,1]+t1[2,2])/nrow(train)
+```
+```{r}
+36/(36+18)
+```
+```{r}
+predicted_class2 = prob_yes > .5
+t1 = table(train$violator, predicted_class2)
+t1
+(t1[1,1] + t1[2,2]) / nrow(train)
+
+```
+```{r}
+predicted_class3 = prob_yes > .4
+t1 = table(train$violator, predicted_class3)
+t1
+(t1[1,1] + t1[2,2]) / nrow(train)
+```
+```{r}
+predicted_class4 = prob_yes > .3
+t1 = table(train$violator, predicted_class4)
+t1
+(t1[1,1] + t1[2,2]) / nrow(train)
+```
+
+```{r}
+predicted_class5 = prob_yes > .2
+t1 = table(train$violator, predicted_class5)
+t1
+(t1[1,1] + t1[2,2]) / nrow(train)
+```
+```{r}
+predictions = predict(parole_fit2, new_data = test, type="prob")
+predictions$.pred_yes
+prob_yes2 = predictions$.pred_yes
+predicted_class10 = prob_yes2 > .5
+t1 = table(test$violator, predicted_class10)
+t1
+(t1[1,1] + t1[2,2]) / nrow(test)
+```
+

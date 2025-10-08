@@ -1,0 +1,45 @@
+## Assignment 1 
+
+```{r}
+library(tidyverse)
+library(mice) #package for imputation
+library(VIM)
+```
+## Load in data set 
+
+```{r}
+class_grades <- read_csv("class-grades.csv")
+```
+
+```{r}
+str(class_grades)
+summary(class_grades)
+skim(class_grades)
+```
+
+```{r}
+gg_miss_case(class_grades)
+```
+
+```{r}
+grades = class_grades %>% drop_na() 
+skim(grades)
+```
+```{r}
+class <- class_grades %>% select(where(~ !any(is.na(.))))
+vim_plot = aggr(class, numbers = TRUE, prop = c(TRUE, FALSE),cex.axis=.7)
+skim(class)
+```
+```{r}
+set.seed(123) #sets seed for random number generator
+new_grades = mice(class_grades, m=5, method='pmm', printFlag=FALSE)
+summary(new_grades)
+```
+```{r}
+densityplot(new_grades, ~Final)
+```
+```{r}
+grades_complete = complete(new_grades) 
+summary(grades_complete )
+```
+
